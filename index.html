@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dictaphone</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f0f0f0;
+            margin: 0;
+            padding: 20px;
+        }
+        #recordButton {
+            padding: 15px 30px;
+            font-size: 18px;
+            background-color: #ff4d4d;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 10px;
+        }
+        #recordButton.recording {
+            background-color: #4CAF50;
+        }
+        #transcript {
+            width: 80%;
+            max-width: 600px;
+            height: 200px;
+            background-color: white;
+            border: 1px solid #ccc;
+            padding: 10px;
+            margin-top: 20px;
+            overflow-y: auto;
+        }
+        #audioPlayback {
+            margin-top: 20px;
+        }
+        #downloadLink {
+            margin-top: 10px;
+            display: none;
+            text-decoration: none;
+            color: #007BFF;
+        }
+    </style>
+</head>
+<body>
+    <h1>Dictaphone</h1>
+    <button id="recordButton">Démarrer l'enregistrement</button>
+    <div id="transcript"></div>
+    <audio id="audioPlayback" controls></audio>
+    <a id="downloadLink" href="#" download="recording.webm">Télécharger l'enregistrement</a>
+
+    <script>
+        let isRecording = false;
+        let mediaRecorder = null;
+        let audioChunks = [];
+        const recordButton = document.getElementById('recordButton');
+        const transcriptDiv = document.getElementById('transcript');
+        const audioPlayback = document.getElementById('audioPlayback');
+        const downloadLink = document.getElementById('downloadLink');
+
+        // Vérifier la compatibilité de l'API Web Speech
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRecognition) {
+            transcriptDiv.textContent = "L'API de reconnaissance vocale n'est pas prise en charge par ce navigateur.";
+        } else {
+            const recognition = new SpeechRecognition();
+            recognition.lang = 'fr-FR';
+            recognition.interimResults = true;
+            recognition.continuous = true;
+
+            // Gestion de la reconnaissance vocale
+            recognition.onresult = (event) => {
+                let transcript = '';
+                for (let i = event.resultIndex; i < event.results.length; i++) {
+                    transcript += event.results[i][0].transcript;
+                }
+                transcriptDiv.textContent = transcript;
+            };
+
+            recognition.onerror = (event) => {
+                console.error('Erreur de reconnaissance vocale:', event.error);
+                transcriptDiv.textContent = 'Erreur lors de la reconnaissance vocale.';
+            };
+
+            // Gestion de l'enregistrement audio
+            navigator.mediaDevices.getUserMedia({ audio: true })
+                .then(stream => {
+                    mediaRecorder = new MediaRecorder(stream);
+
+                    mediaRecorder.ondataavailable = (event) => {
+                        audioChunks.push(event.data);
+                    };
+
+                    mediaRecorder.onstop = () => {
+                        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                        const audioUrl = URL.createObjectURL(audioBlob);
+                        audioPlayback.src = audioUrl;
+                        downloadLink.href = audioUrl;
+                        downloadLink.style.display = 'block';
+                        audioChunks = [];
+                    };
+                })
+                .catch(err => {
+                    console.error('Erreur d’accès au microphone:', err);
+                    transcriptDiv.textContent = 'Erreur d’accès au microphone.';
+                });
+
+            // Gestion du bouton d'enregistrement
+            recordButton.addEventListener('click', () => {
+                if (!isRecording) {
+                    recordButton.textContent = 'Arrêter l’enregistrement';
+                    recordButton.classList.add('recording');
+                    isRecording = true;
+                    audioChunks = [];
+                    mediaRecorder.start();
+                    recognition.start();
+                } else {
+                    recordButton.textContent = 'Démarrer l’enregistrement';
+                    recordButton.classList.remove('recording');
+                    isRecording = false;
+                    mediaRecorder.stop();
+                    recognition.stop();
+                }
+            });
+        }
+    </script>
+</body>
+</html>
