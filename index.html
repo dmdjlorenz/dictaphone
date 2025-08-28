@@ -102,9 +102,6 @@
         const audioPlayback = document.getElementById('audioPlayback');
         const downloadLink = document.getElementById('downloadLink');
 
-        // Vérifier la compatibilité de l'API Web Speech
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-
         // Fonction pour mettre à jour le statut
         function updateStatus(message) {
             statusDiv.textContent = message;
@@ -130,38 +127,61 @@
             }
         }
 
-        // Configurer la reconnaissance vocale si disponible
+        // Vérifier la compatibilité de l'API Web Speech
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         let recognition = null;
+        let recognitionTimeout = null;
+
         if (!SpeechRecognition) {
             updateStatus('La reconnaissance vocale n\'est pas prise en charge sur ce navigateur. Essayez Chrome.');
             console.warn('API SpeechRecognition non disponible.');
         } else {
             try {
                 recognition = new SpeechRecognition();
-                recognition.lang = 'fr-FR';
+                recognition.lang = 'fr-FR'; // Essayer d'abord en français
                 recognition.interimResults = true;
                 recognition.continuous = true;
+                recognition.maxAlternatives = 1;
 
                 recognition.onstart = () => {
                     updateStatus('Transcription en cours...');
-                    console.log('Reconnaissance vocale démarrée.');
+                    console.log('Reconnaissance vocale démarrée avec langue: ' + recognition.lang);
+                    // Timeout pour détecter l'absence de résultats
+                    recognitionTimeout = setTimeout(() => {
+                        if (!transcriptDiv.textContent && isRecording) {
+                            updateStatus('Aucun texte transcrit. Essayez de parler plus fort ou vérifiez le microphone.');
+                            console.warn('Aucun résultat de transcription après 10 secondes.');
+                            // Essayer en anglais comme fallback
+                            if (recognition.lang === 'fr-FR') {
+                                recognition.lang = 'en-US';
+                                updateStatus('Passage à la langue en-US pour la transcription.');
+                                console.log('Changement de langue à en-US.');
+                                if (isRecording) recognition.start();
+                            }
+                        }
+                    }, 10000); // 10 secondes
                 };
 
                 recognition.onresult = (event) => {
                     let transcript = '';
                     for (let i = event.resultIndex; i < event.results.length; i++) {
-                        transcript += event.results[i][0].transcript;
+                        const result = event.results[i][0].transcript;
+                        transcript += result + ' ';
+                        console.log('Résultat partiel:', result);
                     }
-                    transcriptDiv.textContent = transcript;
-                    updateStatus('Transcription en cours...');
+                    transcriptDiv.textContent = transcript.trim();
+                    updateStatus('Transcription en cours... Texte détecté.');
+                    clearTimeout(recognitionTimeout); // Réinitialiser le timeout si un résultat est reçu
                 };
 
                 recognition.onerror = (event) => {
                     updateStatus(`Erreur de reconnaissance vocale : ${event.error}`);
-                    console.error('Erreur de reconnaissance:', event.error);
+                    console.error('Erreur de reconnaissance:', event.error, event.message);
+                    clearTimeout(recognitionTimeout);
                 };
 
                 recognition.onend = () => {
+                    clearTimeout(recognitionTimeout);
                     if (isRecording) {
                         try {
                             recognition.start();
