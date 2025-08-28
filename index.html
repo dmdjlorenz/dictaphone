@@ -1,273 +1,80 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dictaphone</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            background-color: #f0f0f0;
-            margin: 0;
-            padding: 20px;
-            min-height: 100vh;
-            box-sizing: border-box;
-        }
-        h1 {
-            font-size: 24px;
-            text-align: center;
-        }
-        #recordButton {
-            padding: 12px 24px;
-            font-size: 16px;
-            background-color: #ff4d4d;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            margin: 10px;
-            width: 90%;
-            max-width: 300px;
-        }
-        #recordButton.recording {
-            background-color: #4CAF50;
-        }
-        #transcript {
-            width: 90%;
-            max-width: 600px;
-            height: 150px;
-            background-color: white;
-            border: 1px solid #ccc;
-            padding: 10px;
-            margin-top: 20px;
-            overflow-y: auto;
-            font-size: 14px;
-        }
-        #status {
-            color: #333;
-            font-size: 14px;
-            margin-top: 10px;
-            text-align: center;
-            max-width: 90%;
-            word-wrap: break-word;
-        }
-        #audioPlayback {
-            margin-top: 20px;
-            width: 90%;
-            max-width: 600px;
-        }
-        #downloadLink {
-            margin-top: 10px;
-            display: none;
-            text-decoration: none;
-            color: #007BFF;
-            font-size: 14px;
-        }
-        @media (max-width: 600px) {
-            h1 {
-                font-size: 20px;
-            }
-            #recordButton {
-                font-size: 14px;
-                padding: 10px;
-            }
-            #transcript {
-                font-size: 12px;
-                height: 120px;
-            }
-            #status {
-                font-size: 12px;
-            }
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dictaphone Whisper</title>
+<style>
+  body { font-family: sans-serif; padding: 20px; background: #0f172a; color: #e2e8f0; }
+  button { padding: 12px 18px; border: none; border-radius: 10px; font-size: 16px; cursor: pointer; margin: 5px; }
+  .start { background: #22c55e; color: #04110a; }
+  .stop { background: #ef4444; color: #240808; }
+  .save { background: #3b82f6; color: #061428; }
+  #log { margin-top: 15px; padding: 10px; background: #1e293b; border-radius: 8px; min-height: 120px; white-space: pre-wrap; }
+</style>
 </head>
 <body>
-    <h1>Dictaphone</h1>
-    <button id="recordButton" disabled>Démarrer l'enregistrement</button>
-    <div id="status">Vérification des permissions...</div>
-    <div id="transcript"></div>
-    <audio id="audioPlayback" controls></audio>
-    <a id="downloadLink" href="#" download="recording.webm">Télécharger l'enregistrement</a>
+<h1>Dictaphone avec transcription Whisper</h1>
 
-    <script>
-        let isRecording = false;
-        let mediaRecorder = null;
-        let audioChunks = [];
-        const recordButton = document.getElementById('recordButton');
-        const transcriptDiv = document.getElementById('transcript');
-        const statusDiv = document.getElementById('status');
-        const audioPlayback = document.getElementById('audioPlayback');
-        const downloadLink = document.getElementById('downloadLink');
+<button id="start" class="start">▶️ Commencer l'enregistrement</button>
+<button id="stop" class="stop" disabled>⏹️ Arrêter & Transcrire</button>
 
-        // Fonction pour mettre à jour le statut
-        function updateStatus(message) {
-            statusDiv.textContent = message;
-            console.log('Statut: ' + message);
-        }
+<div id="log">En attente...</div>
 
-        // Vérifier les permissions du microphone
-        async function checkMicPermission() {
-            try {
-                const permissionStatus = await navigator.permissions.query({ name: 'microphone' });
-                if (permissionStatus.state === 'denied') {
-                    updateStatus('Permission du microphone refusée. Veuillez l\'activer dans les paramètres.');
-                    return false;
-                }
-                if (permissionStatus.state === 'prompt') {
-                    updateStatus('Veuillez autoriser l\'accès au microphone.');
-                }
-                return true;
-            } catch (err) {
-                updateStatus('Erreur lors de la vérification des permissions du microphone.');
-                console.error('Erreur permission:', err);
-                return false;
-            }
-        }
+<script>
+let mediaRecorder, audioChunks = [];
+const log = document.getElementById('log');
+const startBtn = document.getElementById('start');
+const stopBtn = document.getElementById('stop');
 
-        // Vérifier la compatibilité de l'API Web Speech
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        let recognition = null;
-        let recognitionTimeout = null;
+// Remplace par ta clé API
+const OPENAI_API_KEY = "COLLE_TA_CLE_ICI";
 
-        if (!SpeechRecognition) {
-            updateStatus('La reconnaissance vocale n\'est pas prise en charge sur ce navigateur. Essayez Chrome.');
-            console.warn('API SpeechRecognition non disponible.');
-        } else {
-            try {
-                recognition = new SpeechRecognition();
-                recognition.lang = 'fr-FR'; // Essayer d'abord en français
-                recognition.interimResults = true;
-                recognition.continuous = true;
-                recognition.maxAlternatives = 1;
+startBtn.addEventListener('click', async () => {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+    audioChunks = [];
+    mediaRecorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
+    mediaRecorder.start();
+    log.textContent = "🎙️ Enregistrement en cours...";
+    startBtn.disabled = true;
+    stopBtn.disabled = false;
+  } catch (err) {
+    log.textContent = "Erreur micro : " + err.message;
+  }
+});
 
-                recognition.onstart = () => {
-                    updateStatus('Transcription en cours...');
-                    console.log('Reconnaissance vocale démarrée avec langue: ' + recognition.lang);
-                    // Timeout pour détecter l'absence de résultats
-                    recognitionTimeout = setTimeout(() => {
-                        if (!transcriptDiv.textContent && isRecording) {
-                            updateStatus('Aucun texte transcrit. Essayez de parler plus fort ou vérifiez le microphone.');
-                            console.warn('Aucun résultat de transcription après 10 secondes.');
-                            // Essayer en anglais comme fallback
-                            if (recognition.lang === 'fr-FR') {
-                                recognition.lang = 'en-US';
-                                updateStatus('Passage à la langue en-US pour la transcription.');
-                                console.log('Changement de langue à en-US.');
-                                if (isRecording) recognition.start();
-                            }
-                        }
-                    }, 10000); // 10 secondes
-                };
+stopBtn.addEventListener('click', async () => {
+  mediaRecorder.stop();
+  log.textContent = "⏳ Traitement...";
+  stopBtn.disabled = true;
+  startBtn.disabled = false;
 
-                recognition.onresult = (event) => {
-                    let transcript = '';
-                    for (let i = event.resultIndex; i < event.results.length; i++) {
-                        const result = event.results[i][0].transcript;
-                        transcript += result + ' ';
-                        console.log('Résultat partiel:', result);
-                    }
-                    transcriptDiv.textContent = transcript.trim();
-                    updateStatus('Transcription en cours... Texte détecté.');
-                    clearTimeout(recognitionTimeout); // Réinitialiser le timeout si un résultat est reçu
-                };
+  mediaRecorder.onstop = async () => {
+    const blob = new Blob(audioChunks, { type: 'audio/webm' });
+    const formData = new FormData();
+    formData.append("file", blob, "audio.webm");
+    formData.append("model", "whisper-1"); // modèle OpenAI
+    formData.append("language", "fr");
 
-                recognition.onerror = (event) => {
-                    updateStatus(`Erreur de reconnaissance vocale : ${event.error}`);
-                    console.error('Erreur de reconnaissance:', event.error, event.message);
-                    clearTimeout(recognitionTimeout);
-                };
-
-                recognition.onend = () => {
-                    clearTimeout(recognitionTimeout);
-                    if (isRecording) {
-                        try {
-                            recognition.start();
-                            console.log('Reconnaissance vocale redémarrée.');
-                        } catch (err) {
-                            updateStatus('Erreur lors du redémarrage de la transcription.');
-                            console.error('Erreur redémarrage reconnaissance:', err);
-                        }
-                    } else {
-                        updateStatus('Transcription arrêtée.');
-                    }
-                };
-            } catch (err) {
-                updateStatus('Erreur lors de l\'initialisation de la reconnaissance vocale.');
-                console.error('Erreur initialisation SpeechRecognition:', err);
-            }
-        }
-
-        // Configurer l'enregistrement audio
-        async function setupRecorder() {
-            if (!(await checkMicPermission())) {
-                recordButton.disabled = true;
-                return;
-            }
-
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                mediaRecorder = new MediaRecorder(stream);
-
-                mediaRecorder.ondataavailable = (event) => {
-                    audioChunks.push(event.data);
-                };
-
-                mediaRecorder.onstop = () => {
-                    const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-                    const audioUrl = URL.createObjectURL(audioBlob);
-                    audioPlayback.src = audioUrl;
-                    downloadLink.href = audioUrl;
-                    downloadLink.style.display = 'block';
-                    audioChunks = [];
-                    updateStatus('Enregistrement arrêté. Audio prêt à être lu ou téléchargé.');
-                };
-
-                recordButton.disabled = false;
-                updateStatus('Prêt à enregistrer.');
-            } catch (err) {
-                updateStatus('Erreur d’accès au microphone. Vérifiez les permissions.');
-                console.error('Erreur accès microphone:', err);
-                recordButton.disabled = true;
-            }
-        }
-
-        // Gestion du bouton d'enregistrement
-        recordButton.addEventListener('click', () => {
-            if (!isRecording) {
-                if (mediaRecorder) {
-                    recordButton.textContent = 'Arrêter l’enregistrement';
-                    recordButton.classList.add('recording');
-                    isRecording = true;
-                    audioChunks = [];
-                    mediaRecorder.start();
-                    if (recognition) {
-                        try {
-                            recognition.start();
-                            updateStatus('Enregistrement et transcription en cours...');
-                        } catch (err) {
-                            updateStatus('Erreur lors du démarrage de la transcription.');
-                            console.error('Erreur démarrage reconnaissance:', err);
-                        }
-                    } else {
-                        updateStatus('Enregistrement audio uniquement (transcription non disponible).');
-                    }
-                }
-            } else {
-                recordButton.textContent = 'Démarrer l’enregistrement';
-                recordButton.classList.remove('recording');
-                isRecording = false;
-                mediaRecorder.stop();
-                if (recognition) recognition.stop();
-                updateStatus('Enregistrement arrêté.');
-            }
-        });
-
-        // Initialisation
-        updateStatus('Initialisation...');
-        setupRecorder();
-    </script>
+    try {
+      const res = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${OPENAI_API_KEY}` },
+        body: formData
+      });
+      const data = await res.json();
+      if (data.text) {
+        log.textContent = "Texte transcrit :\n\n" + data.text;
+      } else {
+        log.textContent = "Erreur transcription : " + JSON.stringify(data);
+      }
+    } catch (e) {
+      log.textContent = "Erreur réseau : " + e.message;
+    }
+  };
+});
+</script>
 </body>
 </html>
