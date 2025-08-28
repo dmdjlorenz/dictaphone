@@ -51,6 +51,8 @@
             font-size: 14px;
             margin-top: 10px;
             text-align: center;
+            max-width: 90%;
+            word-wrap: break-word;
         }
         #audioPlayback {
             margin-top: 20px;
@@ -76,13 +78,16 @@
                 font-size: 12px;
                 height: 120px;
             }
+            #status {
+                font-size: 12px;
+            }
         }
     </style>
 </head>
 <body>
     <h1>Dictaphone</h1>
-    <button id="recordButton">Démarrer l'enregistrement</button>
-    <div id="status"></div>
+    <button id="recordButton" disabled>Démarrer l'enregistrement</button>
+    <div id="status">Vérification des permissions...</div>
     <div id="transcript"></div>
     <audio id="audioPlayback" controls></audio>
     <a id="downloadLink" href="#" download="recording.webm">Télécharger l'enregistrement</a>
@@ -100,18 +105,27 @@
         // Vérifier la compatibilité de l'API Web Speech
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
+        // Fonction pour mettre à jour le statut
+        function updateStatus(message) {
+            statusDiv.textContent = message;
+            console.log('Statut: ' + message);
+        }
+
         // Vérifier les permissions du microphone
         async function checkMicPermission() {
             try {
                 const permissionStatus = await navigator.permissions.query({ name: 'microphone' });
                 if (permissionStatus.state === 'denied') {
-                    statusDiv.textContent = 'Permission du microphone refusée. Veuillez l\'activer dans les paramètres.';
+                    updateStatus('Permission du microphone refusée. Veuillez l\'activer dans les paramètres.');
                     return false;
+                }
+                if (permissionStatus.state === 'prompt') {
+                    updateStatus('Veuillez autoriser l\'accès au microphone.');
                 }
                 return true;
             } catch (err) {
-                statusDiv.textContent = 'Erreur lors de la vérification des permissions du microphone.';
-                console.error(err);
+                updateStatus('Erreur lors de la vérification des permissions du microphone.');
+                console.error('Erreur permission:', err);
                 return false;
             }
         }
@@ -119,37 +133,59 @@
         // Configurer la reconnaissance vocale si disponible
         let recognition = null;
         if (!SpeechRecognition) {
-            statusDiv.textContent = 'La reconnaissance vocale n\'est pas prise en charge sur ce navigateur. Essayez Chrome.';
+            updateStatus('La reconnaissance vocale n\'est pas prise en charge sur ce navigateur. Essayez Chrome.');
+            console.warn('API SpeechRecognition non disponible.');
         } else {
-            recognition = new SpeechRecognition();
-            recognition.lang = 'fr-FR';
-            recognition.interimResults = true;
-            recognition.continuous = true;
+            try {
+                recognition = new SpeechRecognition();
+                recognition.lang = 'fr-FR';
+                recognition.interimResults = true;
+                recognition.continuous = true;
 
-            recognition.onresult = (event) => {
-                let transcript = '';
-                for (let i = event.resultIndex; i < event.results.length; i++) {
-                    transcript += event.results[i][0].transcript;
-                }
-                transcriptDiv.textContent = transcript;
-                statusDiv.textContent = 'Transcription en cours...';
-            };
+                recognition.onstart = () => {
+                    updateStatus('Transcription en cours...');
+                    console.log('Reconnaissance vocale démarrée.');
+                };
 
-            recognition.onerror = (event) => {
-                statusDiv.textContent = `Erreur de reconnaissance vocale : ${event.error}`;
-                console.error('Erreur de reconnaissance vocale:', event.error);
-            };
+                recognition.onresult = (event) => {
+                    let transcript = '';
+                    for (let i = event.resultIndex; i < event.results.length; i++) {
+                        transcript += event.results[i][0].transcript;
+                    }
+                    transcriptDiv.textContent = transcript;
+                    updateStatus('Transcription en cours...');
+                };
 
-            recognition.onend = () => {
-                if (isRecording) {
-                    recognition.start(); // Redémarrer si l'enregistrement est toujours actif
-                }
-            };
+                recognition.onerror = (event) => {
+                    updateStatus(`Erreur de reconnaissance vocale : ${event.error}`);
+                    console.error('Erreur de reconnaissance:', event.error);
+                };
+
+                recognition.onend = () => {
+                    if (isRecording) {
+                        try {
+                            recognition.start();
+                            console.log('Reconnaissance vocale redémarrée.');
+                        } catch (err) {
+                            updateStatus('Erreur lors du redémarrage de la transcription.');
+                            console.error('Erreur redémarrage reconnaissance:', err);
+                        }
+                    } else {
+                        updateStatus('Transcription arrêtée.');
+                    }
+                };
+            } catch (err) {
+                updateStatus('Erreur lors de l\'initialisation de la reconnaissance vocale.');
+                console.error('Erreur initialisation SpeechRecognition:', err);
+            }
         }
 
         // Configurer l'enregistrement audio
         async function setupRecorder() {
-            if (!(await checkMicPermission())) return;
+            if (!(await checkMicPermission())) {
+                recordButton.disabled = true;
+                return;
+            }
 
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -166,13 +202,15 @@
                     downloadLink.href = audioUrl;
                     downloadLink.style.display = 'block';
                     audioChunks = [];
+                    updateStatus('Enregistrement arrêté. Audio prêt à être lu ou téléchargé.');
                 };
 
-                // Activer le bouton d'enregistrement
                 recordButton.disabled = false;
+                updateStatus('Prêt à enregistrer.');
             } catch (err) {
-                statusDiv.textContent = 'Erreur d’accès au microphone. Vérifiez les permissions.';
-                console.error('Erreur d’accès au microphone:', err);
+                updateStatus('Erreur d’accès au microphone. Vérifiez les permissions.');
+                console.error('Erreur accès microphone:', err);
+                recordButton.disabled = true;
             }
         }
 
@@ -188,13 +226,13 @@
                     if (recognition) {
                         try {
                             recognition.start();
-                            statusDiv.textContent = 'Enregistrement et transcription en cours...';
+                            updateStatus('Enregistrement et transcription en cours...');
                         } catch (err) {
-                            statusDiv.textContent = 'Erreur lors du démarrage de la transcription.';
-                            console.error('Erreur de reconnaissance:', err);
+                            updateStatus('Erreur lors du démarrage de la transcription.');
+                            console.error('Erreur démarrage reconnaissance:', err);
                         }
                     } else {
-                        statusDiv.textContent = 'Enregistrement audio uniquement (transcription non disponible).';
+                        updateStatus('Enregistrement audio uniquement (transcription non disponible).');
                     }
                 }
             } else {
@@ -203,11 +241,12 @@
                 isRecording = false;
                 mediaRecorder.stop();
                 if (recognition) recognition.stop();
-                statusDiv.textContent = 'Enregistrement arrêté.';
+                updateStatus('Enregistrement arrêté.');
             }
         });
 
         // Initialisation
+        updateStatus('Initialisation...');
         setupRecorder();
     </script>
 </body>
