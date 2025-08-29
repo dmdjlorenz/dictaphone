@@ -113,15 +113,15 @@
             try {
                 const permissionStatus = await navigator.permissions.query({ name: 'microphone' });
                 if (permissionStatus.state === 'denied') {
-                    updateStatus('Permission du microphone refusée. Activez-la dans Paramètres > Applications > Chrome > Autorisations.');
+                    updateStatus('Permission du microphone refusée. Activez-la dans Paramètres > Applications > Chrome.');
                     return false;
                 }
                 if (permissionStatus.state === 'prompt') {
-                    updateStatus('Veuillez autoriser l\'accès au microphone dans la fenêtre contextuelle.');
+                    updateStatus('Veuillez autoriser l\'accès au microphone.');
                 }
                 return true;
             } catch (err) {
-                updateStatus('Erreur lors de la vérification des permissions du microphone.');
+                updateStatus('Erreur lors de la vérification des permissions.');
                 console.error('Erreur permission:', err);
                 return false;
             }
@@ -130,10 +130,9 @@
         // Vérifier la compatibilité de l'API Web Speech
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         let recognition = null;
-        let recognitionTimeout = null;
 
         if (!SpeechRecognition) {
-            updateStatus('La reconnaissance vocale n\'est pas prise en charge. Essayez de mettre à jour Chrome ou utilisez un autre appareil.');
+            updateStatus('Reconnaissance vocale non prise en charge. Essayez une application native comme Google Keep.');
             console.warn('API SpeechRecognition non disponible.');
         } else {
             try {
@@ -144,27 +143,8 @@
                 recognition.maxAlternatives = 1;
 
                 recognition.onstart = () => {
-                    updateStatus('Transcription en cours... Parlez clairement à 10-20 cm du microphone.');
-                    console.log('Reconnaissance vocale démarrée avec langue: ' + recognition.lang);
-                    recognitionTimeout = setTimeout(() => {
-                        if (!transcriptDiv.textContent && isRecording) {
-                            updateStatus('Aucun texte transcrit. Essayez de parler plus fort, vérifier le Wi-Fi, ou utiliser en-US.');
-                            console.warn('Aucun résultat après 10 secondes.');
-                            if (recognition.lang === 'fr-FR') {
-                                recognition.lang = 'en-US';
-                                updateStatus('Passage à la langue en-US pour la transcription.');
-                                console.log('Changement de langue à en-US.');
-                                if (isRecording) {
-                                    try {
-                                        recognition.start();
-                                    } catch (err) {
-                                        updateStatus('Erreur lors du changement de langue.');
-                                        console.error('Erreur changement langue:', err);
-                                    }
-                                }
-                            }
-                        }
-                    }, 10000);
+                    updateStatus('Transcription en cours... Parlez fort à 10-20 cm du microphone.');
+                    console.log('Reconnaissance vocale démarrée.');
                 };
 
                 recognition.onresult = (event) => {
@@ -172,43 +152,40 @@
                     for (let i = event.resultIndex; i < event.results.length; i++) {
                         const result = event.results[i][0].transcript;
                         transcript += result + ' ';
-                        console.log('Résultat partiel:', result, 'Confiance:', event.results[i][0].confidence);
+                        console.log('Résultat:', result, 'Confiance:', event.results[i][0].confidence);
                     }
                     transcriptDiv.textContent = transcript.trim();
-                    updateStatus('Transcription en cours... Texte détecté.');
-                    clearTimeout(recognitionTimeout);
+                    updateStatus('Texte transcrit détecté.');
                 };
 
                 recognition.onerror = (event) => {
-                    updateStatus(`Erreur de reconnaissance vocale : ${event.error} (${event.message || 'aucun détail'})`);
-                    console.error('Erreur de reconnaissance:', event.error, event.message);
-                    clearTimeout(recognitionTimeout);
+                    updateStatus(`Erreur de transcription : ${event.error} (${event.message || 'aucun détail'})`);
+                    console.error('Erreur:', event.error, event.message);
                     if (event.error === 'no-speech') {
-                        updateStatus('Aucun son détecté. Parlez plus fort ou rapprochez-vous du microphone (10-20 cm).');
+                        updateStatus('Aucun son détecté. Parlez plus fort à 10-20 cm.');
                     } else if (event.error === 'network') {
-                        updateStatus('Erreur réseau. Connectez-vous à un Wi-Fi stable et réessayez.');
+                        updateStatus('Erreur réseau. Connectez-vous à un Wi-Fi stable.');
                     } else if (event.error === 'not-allowed') {
-                        updateStatus('Accès au microphone refusé. Vérifiez les permissions dans Paramètres > Applications > Chrome.');
+                        updateStatus('Microphone bloqué. Vérifiez Paramètres > Applications > Chrome.');
                     }
                 };
 
                 recognition.onend = () => {
-                    clearTimeout(recognitionTimeout);
                     if (isRecording) {
                         try {
                             recognition.start();
-                            console.log('Reconnaissance vocale redémarrée.');
+                            console.log('Reconnaissance redémarrée.');
                         } catch (err) {
-                            updateStatus('Erreur lors du redémarrage de la transcription.');
-                            console.error('Erreur redémarrage reconnaissance:', err);
+                            updateStatus('Erreur redémarrage transcription.');
+                            console.error('Erreur redémarrage:', err);
                         }
                     } else {
                         updateStatus('Transcription arrêtée.');
                     }
                 };
             } catch (err) {
-                updateStatus('Erreur lors de l\'initialisation de la reconnaissance vocale.');
-                console.error('Erreur initialisation SpeechRecognition:', err);
+                updateStatus('Erreur initialisation transcription.');
+                console.error('Erreur initialisation:', err);
             }
         }
 
@@ -234,19 +211,19 @@
                     downloadLink.href = audioUrl;
                     downloadLink.style.display = 'block';
                     audioChunks = [];
-                    updateStatus('Enregistrement arrêté. Audio prêt à être lu ou téléchargé.');
+                    updateStatus('Enregistrement arrêté. Audio prêt.');
                 };
 
                 recordButton.disabled = false;
                 updateStatus('Prêt à enregistrer.');
             } catch (err) {
-                updateStatus('Erreur d’accès au microphone. Vérifiez les permissions dans Paramètres > Applications > Chrome.');
-                console.error('Erreur accès microphone:', err);
+                updateStatus('Erreur accès microphone. Vérifiez les permissions.');
+                console.error('Erreur microphone:', err);
                 recordButton.disabled = true;
             }
         }
 
-        // Gestion du bouton d'enregistrement
+        // Gestion du bouton
         recordButton.addEventListener('click', () => {
             if (!isRecording) {
                 if (mediaRecorder) {
@@ -258,10 +235,10 @@
                     if (recognition) {
                         try {
                             recognition.start();
-                            updateStatus('Enregistrement et transcription en cours... Parlez clairement à 10-20 cm.');
+                            updateStatus('Enregistrement et transcription en cours... Parlez fort à 10-20 cm.');
                         } catch (err) {
-                            updateStatus('Erreur lors du démarrage de la transcription.');
-                            console.error('Erreur démarrage reconnaissance:', err);
+                            updateStatus('Erreur démarrage transcription.');
+                            console.error('Erreur démarrage:', err);
                         }
                     } else {
                         updateStatus('Enregistrement audio uniquement (transcription non disponible).');
