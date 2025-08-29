@@ -35,7 +35,7 @@
         #recordButton.recording {
             background-color: #4CAF50;
         }
-        #transcript {
+        #transcript, #manualTranscript {
             width: 90%;
             max-width: 600px;
             height: 150px;
@@ -45,6 +45,10 @@
             margin-top: 20px;
             overflow-y: auto;
             font-size: 14px;
+        }
+        #manualTranscript {
+            height: 100px;
+            margin-top: 10px;
         }
         #status {
             color: #333;
@@ -74,9 +78,12 @@
                 font-size: 14px;
                 padding: 10px;
             }
-            #transcript {
+            #transcript, #manualTranscript {
                 font-size: 12px;
                 height: 120px;
+            }
+            #manualTranscript {
+                height: 80px;
             }
             #status {
                 font-size: 12px;
@@ -89,6 +96,7 @@
     <button id="recordButton" disabled>Démarrer l'enregistrement</button>
     <div id="status">Vérification des permissions...</div>
     <div id="transcript"></div>
+    <textarea id="manualTranscript" placeholder="Collez ici une transcription manuelle si nécessaire"></textarea>
     <audio id="audioPlayback" controls></audio>
     <a id="downloadLink" href="#" download="recording.webm">Télécharger l'enregistrement</a>
 
@@ -98,6 +106,7 @@
         let audioChunks = [];
         const recordButton = document.getElementById('recordButton');
         const transcriptDiv = document.getElementById('transcript');
+        const manualTranscript = document.getElementById('manualTranscript');
         const statusDiv = document.getElementById('status');
         const audioPlayback = document.getElementById('audioPlayback');
         const downloadLink = document.getElementById('downloadLink');
@@ -132,14 +141,14 @@
         let recognition = null;
 
         if (!SpeechRecognition) {
-            updateStatus('Reconnaissance vocale non prise en charge. Essayez une application native comme Google Keep.');
+            updateStatus('Reconnaissance vocale non prise en charge dans ce navigateur.');
             console.warn('API SpeechRecognition non disponible.');
         } else {
             try {
                 recognition = new SpeechRecognition();
                 recognition.lang = 'fr-FR';
                 recognition.interimResults = true;
-                recognition.continuous = true;
+                recognition.continuous = false; // Désactiver continuous pour éviter redémarrages
                 recognition.maxAlternatives = 1;
 
                 recognition.onstart = () => {
@@ -171,17 +180,8 @@
                 };
 
                 recognition.onend = () => {
-                    if (isRecording) {
-                        try {
-                            recognition.start();
-                            console.log('Reconnaissance redémarrée.');
-                        } catch (err) {
-                            updateStatus('Erreur redémarrage transcription.');
-                            console.error('Erreur redémarrage:', err);
-                        }
-                    } else {
-                        updateStatus('Transcription arrêtée.');
-                    }
+                    updateStatus('Transcription arrêtée.');
+                    console.log('Reconnaissance vocale arrêtée.');
                 };
             } catch (err) {
                 updateStatus('Erreur initialisation transcription.');
@@ -211,7 +211,7 @@
                     downloadLink.href = audioUrl;
                     downloadLink.style.display = 'block';
                     audioChunks = [];
-                    updateStatus('Enregistrement arrêté. Audio prêt.');
+                    updateStatus('Enregistrement arrêté. Audio prêt. Collez une transcription manuelle si nécessaire.');
                 };
 
                 recordButton.disabled = false;
@@ -237,11 +237,11 @@
                             recognition.start();
                             updateStatus('Enregistrement et transcription en cours... Parlez fort à 10-20 cm.');
                         } catch (err) {
-                            updateStatus('Erreur démarrage transcription.');
+                            updateStatus('Erreur démarrage transcription. Enregistrement uniquement.');
                             console.error('Erreur démarrage:', err);
                         }
                     } else {
-                        updateStatus('Enregistrement audio uniquement (transcription non disponible).');
+                        updateStatus('Enregistrement en cours... Parlez fort à 10-20 cm.');
                     }
                 }
             } else {
@@ -250,7 +250,7 @@
                 isRecording = false;
                 mediaRecorder.stop();
                 if (recognition) recognition.stop();
-                updateStatus('Enregistrement arrêté.');
+                updateStatus('Enregistrement arrêté. Audio prêt. Collez une transcription manuelle si nécessaire.');
             }
         });
 
